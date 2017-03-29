@@ -33,6 +33,7 @@ hide_coins = True
 coin_cfg_alerted = {}
 max_active_alerted = {}
 notify_conf = {}
+loans_provided = {}
 
 # limit of orders to request
 loanOrdersRequestLimit = {}
@@ -73,10 +74,13 @@ def init(cfg, api1, log1, data, maxtolend, dry_run1, analysis, notify_conf1):
 
     sleep_time = sleep_time_active  # Start with active mode
 
-    if notify_conf['enable_notifications'] and notify_conf['notify_summary_minutes']:
+    if notify_conf['enable_notifications']:
         scheduler = sched.scheduler(time.time, time.sleep)
         # Wait 10 seconds before firing the first summary notifcation, then use the config time value for future updates
-        scheduler.enter(10, 1, notify_summary, (notify_conf['notify_summary_minutes'] * 60, ))
+        if notify_conf['notify_summary_minutes']:
+            scheduler.enter(10, 1, notify_summary, (notify_conf['notify_summary_minutes'] * 60, ))
+        if notify_conf['notify_new_loans']:
+            scheduler.enter(15, 1, notify_new_loans, (60, ))
         t = threading.Thread(target=scheduler.run)
         t.start()
 
@@ -96,6 +100,21 @@ def set_sleep_time(usable):
 def notify_summary(sleep_time):
     log.notify(Data.stringify_total_lended(*Data.get_total_lended()), notify_conf)
     scheduler.enter(sleep_time, 1, notify_summary, (sleep_time, ))
+
+
+def notify_new_loans(sleep_time):
+    global loans_provided
+    new_provided = api.return_active_loans()['provided']
+    if loans_provided:
+        get_ids = lambda loans: map(lambda l: l['id'], loans)
+        new_loan_ids = set(get_ids(new_provided)) - set(get_ids(loans_provided))
+        for id in new_loan_ids:
+            loan = filter(lambda l: l['id'] == id, new_provided)[0]
+            t = "{0} {1} loan filled for {2} days at a rate of {3:.4f}%"
+            text = t.format(loan['amount'], loan['currency'], loan['duration'], float(loan['rate']) * 100)
+            log.notify(text, notify_conf)
+    loans_provided = new_provided
+    scheduler.enter(sleep_time, 1, notify_new_loans, (sleep_time, ))
 
 
 def get_min_loan_size(currency):
@@ -128,7 +147,7 @@ def create_lend_offer(currency, amt, rate):
                 days = str(days_remaining)
         if not dry_run:
             msg = api.create_loan_offer(currency, amt, days, 0, rate)
-            if days == xdays:
+            if days == xdays and notify_conf['notify_xday_threshold']:
                 text = "{0} {1} loan placed for {2} days at a rate of {3:.4f}%".format(amt, currency, days, rate * 100)
                 log.notify(text, notify_conf)
             log.offer(amt, currency, rate, days, msg)
