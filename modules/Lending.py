@@ -106,10 +106,9 @@ def notify_new_loans(sleep_time):
     global loans_provided
     new_provided = api.return_active_loans()['provided']
     if loans_provided:
-        get_ids = lambda loans: map(lambda l: l['id'], loans)
-        new_loan_ids = set(get_ids(new_provided)) - set(get_ids(loans_provided))
-        for id in new_loan_ids:
-            loan = filter(lambda l: l['id'] == id, new_provided)[0]
+        get_id_set = lambda loans: set([x['id'] for x in loans]) # lambda to return a set of ids from the api result
+        for id in get_id_set(new_provided) - get_id_set(loans_provided):
+            loan = [x for x in new_provided if x['id'] == id][0]
             t = "{0} {1} loan filled for {2} days at a rate of {3:.4f}%"
             text = t.format(loan['amount'], loan['currency'], loan['duration'], float(loan['rate']) * 100)
             log.notify(text, notify_conf)
