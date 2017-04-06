@@ -102,8 +102,9 @@ def set_sleep_time(usable):
 def notify_summary(sleep_time):
     try:
         log.notify(Data.stringify_total_lended(*Data.get_total_lended()), notify_conf)
-    except urllib2.HTTPError:
-        pass
+    except Exception as ex:
+        ex.message = ex.message if ex.message else str(ex)
+        print("Error during summary notification: {0}".format(ex.message))
     scheduler.enter(sleep_time, 1, notify_summary, (sleep_time, ))
 
 
@@ -128,8 +129,9 @@ def notify_new_loans(sleep_time):
                 text = t.format(amount, loan['currency'], loan['duration'], float(loan['rate']) * 100)
                 log.notify(text, notify_conf)
         loans_provided = new_provided
-    except urllib2.HTTPError:
-        pass
+    except Exception as ex:
+        ex.message = ex.message if ex.message else str(ex)
+        print("Error during new loans notification: {0}".format(ex.message))
     scheduler.enter(sleep_time, 1, notify_new_loans, (sleep_time, ))
 
 
